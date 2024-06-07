@@ -1,20 +1,36 @@
 package edu.put.fogmap
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.*
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.CircleOptions
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Polygon
 import com.google.android.gms.maps.model.PolygonOptions
-import java.util.Arrays
+import com.google.android.gms.maps.model.PolylineOptions
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mutablePolygon: Polygon
-    private val center = LatLng(0.0, 0.0)
+    private lateinit var googleMap: GoogleMap
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var locationCallback: LocationCallback
+    private lateinit var locationRequest: LocationRequest
+    private val visitedLocations = mutableListOf<LatLng>() // List to store visited locations
+
+    companion object {
+        private const val LOCATION_PERMISSION_REQUEST_CODE = 1
+        private const val FOG_RADIUS_METERS = 30.0
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,46 +38,95 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
         val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
+
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        // Create location request
+        locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
+            .setWaitForAccurateLocation(false)
+            .setMinUpdateIntervalMillis(5000)
+            .setMaxUpdateDelayMillis(10000)
+            .build()
+
+        // Location callback to handle location updates
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                if (locationResult.locations.isNotEmpty()) {
+                    val location = locationResult.locations.last() // Get the last location
+                    val currentLatLng = LatLng(location.latitude, location.longitude)
+                    Log.d("MapsActivity", "Location updated: $currentLatLng")
+
+                    // Add the new location to the visited locations list
+                    visitedLocations.add(currentLatLng)
+                    Log.d("MapsActivity", "Visited locations: $visitedLocations")
+
+                    // Update the heat map
+                    updateHeatMap()
+                }
+            }
+        }
     }
 
     override fun onMapReady(googleMap: GoogleMap) {
-        // Define coordinates for the polygon covering a large area (e.g., a rough rectangle)
-        val polygonCoords = listOf(
-            LatLng(85.0, -180.0),  // Top left corner
-            LatLng(85.0, 180.0),   // Top right corner
-            LatLng(-85.0, 180.0),  // Bottom right corner
-            LatLng(-85.0, -180.0), // Bottom left corner
-            LatLng(85.0, -180.0)   // Close the loop by repeating the first point
-        )
+        this.googleMap = googleMap
 
-        // Create and add the polygon to the map
-        mutablePolygon = googleMap.addPolygon(PolygonOptions().apply {
-            add(LatLng(85.0, 90.0), LatLng(85.0,0.1),
-            LatLng(85.0,-90.0), LatLng(85.0,-179.9),
-            LatLng(0.0,-179.9), LatLng(-85.0,-179.9),
-            LatLng(-85.0,-90.0), LatLng(-85.0,0.1),
-            LatLng(-85.0,90.0), LatLng(-85.0,179.9),
-            LatLng(0.0,179.9), LatLng(85.0,179.9))
-//            addHole(createRectangle(LatLng(-22.0, 128.0), 1.0, 1.0))
-//            addHole(createRectangle(LatLng(-18.0, 133.0), 0.5, 1.5))
-            fillColor(0xff000000.toInt())
-            strokeColor(0xff000000.toInt())
-        })
-
-        // Move the camera to show the polygon (centered on the world)
-        googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(0.0, 0.0), 5.0f))
+        // Check for location permissions
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED) {
+            startLocationUpdates()
+        } else {
+            ActivityCompat.requestPermissions(this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                LOCATION_PERMISSION_REQUEST_CODE)
+        }
     }
 
-    private fun createRectangle(
-        center: LatLng,
-        halfWidth: Double,
-        halfHeight: Double
-    ): List<LatLng> {
-        return Arrays.asList(
-            LatLng(center.latitude - halfHeight, center.longitude - halfWidth),
-            LatLng(center.latitude - halfHeight, center.longitude + halfWidth),
-            LatLng(center.latitude + halfHeight, center.longitude + halfWidth),
-            LatLng(center.latitude + halfHeight, center.longitude - halfWidth)
-            )
+    private fun startLocationUpdates() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED) {
+            googleMap.isMyLocationEnabled = true
+            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null)
+        }
+    }
+
+    private fun stopLocationUpdates() {
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+    }
+
+    private fun updateHeatMap() {
+        // Clear all previous polygons and polylines
+        googleMap.clear()
+
+        // Create circles around each visited location
+        visitedLocations.forEach { location ->
+            val circleOptions = CircleOptions().apply {
+                center(location)
+                radius(FOG_RADIUS_METERS) // Set the radius of the circle
+                fillColor(0x60aa0000.toInt()) // Set the fill color with fixed alpha value
+                strokeColor(0x00000000) // No stroke
+            }
+            googleMap.addCircle(circleOptions)
+        }
+    }
+
+
+
+
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>,
+                                            grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            LOCATION_PERMISSION_REQUEST_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    startLocationUpdates()
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopLocationUpdates()
     }
 }
