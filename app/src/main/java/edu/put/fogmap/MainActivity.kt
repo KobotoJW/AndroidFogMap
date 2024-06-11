@@ -13,22 +13,19 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.CircleOptions
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polygon
 import com.google.android.gms.maps.model.PolygonOptions
-import com.google.android.gms.maps.model.PolylineOptions
-import kotlin.math.atan2
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
-    private lateinit var mutablePolygon: Polygon
     private lateinit var googleMap: GoogleMap
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
     private lateinit var locationRequest: LocationRequest
-    private val visitedLocations = mutableListOf<LatLng>() // List to store visited locations
+    private val visitedLocations = mutableListOf<LatLng>()
+    private val drawnPolygons = mutableListOf<Polygon>()
 
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1
@@ -63,8 +60,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                     visitedLocations.add(currentLatLng)
                     Log.d("MapsActivity", "Visited locations: $visitedLocations")
 
-                    // Update the heat map
-                    updateHeatMap()
+                    // Update the map
+                    updateMap()
                 }
             }
         }
@@ -102,16 +99,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         return results[0].toDouble()
     }
 
-    private fun updateHeatMap() {
-        // Clear all previous polygons and markers
-        googleMap.clear()
-
+    private fun updateMap() {
         if (visitedLocations.isEmpty()) return
 
         val radiusInDegrees = FOG_RADIUS_METERS / 111000.0 // Approximate conversion from meters to degrees
-
-        val bufferedPoints = mutableListOf<LatLng>()
-        val bufferedPolygons = mutableListOf<List<LatLng>>()
+        val newPolygons = mutableListOf<List<LatLng>>()
 
         visitedLocations.forEach { location ->
             val north = location.latitude + radiusInDegrees
@@ -126,56 +118,51 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 LatLng(south, east),
                 LatLng(south, west)
             )
-            bufferedPolygons.add(bufferPolygon)
+
+            // Check if the new polygon overlaps with any existing polygon
+            val isOverlap = drawnPolygons.any { polygon ->
+                bufferPolygon.any { point -> isPointInPolygon(point, polygon.points) }
+            }
+
+            if (!isOverlap) {
+                newPolygons.add(bufferPolygon)
+            }
         }
 
-        // Merge all buffer polygons into a single polygon
-        // For simplicity, assume that all buffer polygons form a convex hull
-        bufferedPoints.addAll(bufferedPolygons.flatten())
-        val mergedPolygonPoints = convexHull(bufferedPoints)
+        // Draw all the new polygons without clearing the map
+        newPolygons.forEach { polygonPoints ->
+            val polygonOptions = PolygonOptions().apply {
+                addAll(polygonPoints)
+                fillColor(0x60aa0000.toInt()) // Set the fill color with fixed alpha value
+                strokeColor(0x00000000) // No stroke
+            }
+            val polygon = googleMap.addPolygon(polygonOptions)
+            drawnPolygons.add(polygon)
 
-        // Create a polygon around all visited locations
-        val polygonOptions = PolygonOptions().apply {
-            addAll(mergedPolygonPoints)
-            fillColor(0x60aa0000.toInt()) // Set the fill color with fixed alpha value
-            strokeColor(0x00000000) // No stroke
-        }
-        googleMap.addPolygon(polygonOptions)
-
-        // Add markers for each point in the polygon
-        mergedPolygonPoints.forEach { point ->
-            googleMap.addMarker(MarkerOptions().position(point).title("Polygon Point"))
+            // Add markers for each point in the polygon
+            polygonPoints.forEach { point ->
+                googleMap.addMarker(MarkerOptions().position(point).title("Polygon Point"))
+            }
         }
     }
 
-    private fun convexHull(points: List<LatLng>): List<LatLng> {
-        if (points.size < 3) return points
-
-        val sortedPoints = points.sortedWith(compareBy({ it.longitude }, { it.latitude }))
-        val lower = mutableListOf<LatLng>()
-        val upper = mutableListOf<LatLng>()
-
-        for (point in sortedPoints) {
-            while (lower.size >= 2 && cross(lower[lower.size - 2], lower[lower.size - 1], point) <= 0) {
-                lower.removeAt(lower.size - 1)
+    private fun isPointInPolygon(point: LatLng, polygonPoints: List<LatLng>): Boolean {
+        var isInside = false
+        val n = polygonPoints.size
+        var j = n - 1
+        for (i in 0 until n) {
+            val vertex1 = polygonPoints[i]
+            val vertex2 = polygonPoints[j]
+            if (vertex1.longitude < point.longitude && vertex2.longitude >= point.longitude
+                || vertex2.longitude < point.longitude && vertex1.longitude >= point.longitude) {
+                if (vertex1.latitude + (point.longitude - vertex1.longitude) /
+                    (vertex2.longitude - vertex1.longitude) * (vertex2.latitude - vertex1.latitude) < point.latitude) {
+                    isInside = !isInside
+                }
             }
-            lower.add(point)
+            j = i
         }
-
-        for (point in sortedPoints.asReversed()) {
-            while (upper.size >= 2 && cross(upper[upper.size - 2], upper[upper.size - 1], point) <= 0) {
-                upper.removeAt(upper.size - 1)
-            }
-            upper.add(point)
-        }
-
-        lower.removeAt(lower.size - 1)
-        upper.removeAt(upper.size - 1)
-        return lower + upper
-    }
-
-    private fun cross(o: LatLng, a: LatLng, b: LatLng): Double {
-        return (a.longitude - o.longitude) * (b.latitude - o.latitude) - (a.latitude - o.latitude) * (b.longitude - o.longitude)
+        return isInside
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>,
