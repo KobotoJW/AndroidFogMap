@@ -24,21 +24,20 @@ class LoginActivity : AppCompatActivity() {
         val registerButton = findViewById<Button>(R.id.registerButton)
 
         loginButton.setOnClickListener {
-    val email = emailEditText.text.toString()
-    val password = passwordEditText.text.toString()
+            val email = emailEditText.text.toString()
+            val password = passwordEditText.text.toString()
 
-    auth.signInWithEmailAndPassword(email, password)
-        .addOnCompleteListener(this) { task ->
-            if (task.isSuccessful) {
-                val intent = Intent(this, MapsActivity::class.java)
-                startActivity(intent)
-                finish()
-                MapsActivity().loadVisitedLocations()
-            } else {
-                Toast.makeText(baseContext, "Authentication failed.", Toast.LENGTH_SHORT).show()
-            }
+            auth.signInWithEmailAndPassword(email, password)
+                .addOnCompleteListener(this) { task ->
+                    if (task.isSuccessful) {
+                        val intent = Intent(this, MapsActivity::class.java)
+                        startActivity(intent)
+                        finish()
+                    } else {
+                        Toast.makeText(baseContext, "Authentication failed.", Toast.LENGTH_SHORT).show()
+                    }
+                }
         }
-}
 
         registerButton.setOnClickListener {
             val intent = Intent(this, RegisterActivity::class.java)

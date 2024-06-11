@@ -26,6 +26,7 @@ import com.google.android.gms.maps.model.PolygonOptions
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlin.math.cos
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
@@ -49,6 +50,9 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
         firestore = FirebaseFirestore.getInstance()
 
+        clearMap()
+        loadVisitedLocations()
+
         val toolbar: Toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
 
@@ -70,11 +74,9 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 if (locationResult.locations.isNotEmpty()) {
                     val location = locationResult.locations.last() // Get the last location
                     val currentLatLng = LatLng(location.latitude, location.longitude)
-                    Log.d("MapsActivity", "Location updated: $currentLatLng")
 
                     // Add the new location to the visited locations list
                     visitedLocations.add(currentLatLng)
-                    Log.d("MapsActivity", "Visited locations: $visitedLocations")
 
                     // Save the location to Firebase
                     saveVisitedLocation(currentLatLng)
@@ -143,8 +145,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         visitedLocations.forEach { location ->
             val north = location.latitude + radiusInDegrees
             val south = location.latitude - radiusInDegrees
-            val east = location.longitude + radiusInDegrees / Math.cos(Math.toRadians(location.latitude))
-            val west = location.longitude - radiusInDegrees / Math.cos(Math.toRadians(location.latitude))
+            val east = location.longitude + radiusInDegrees / cos(Math.toRadians(location.latitude))
+            val west = location.longitude - radiusInDegrees / cos(Math.toRadians(location.latitude))
 
             // Create a buffer rectangle around the point
             val bufferPolygon = listOf(
@@ -214,14 +216,13 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             "longitude" to location.longitude
         )
 
-        // Log the data being sent to the database
-        Log.d("MapsActivity", "Saving location to database: $locationMap")
-
         firestore.collection("users").document(userId).collection("locations").add(locationMap)
     }
 
-    fun loadVisitedLocations() {
+    private fun loadVisitedLocations() {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+
+        clearMap()
 
         firestore.collection("users").document(userId).collection("locations")
             .get()
@@ -240,6 +241,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             }
     }
 
+    private fun clearMap() {
+        drawnPolygons.forEach { it.remove() }
+        drawnPolygons.clear()
+        visitedLocations.clear()
+    }
 
     override fun onDestroy() {
         super.onDestroy()
