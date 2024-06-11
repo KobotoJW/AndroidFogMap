@@ -93,12 +93,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 
-    private fun calculateDistance(point1: LatLng, point2: LatLng): Double {
-        val results = FloatArray(1)
-        Location.distanceBetween(point1.latitude, point1.longitude, point2.latitude, point2.longitude, results)
-        return results[0].toDouble()
-    }
-
     private fun updateMap() {
         if (visitedLocations.isEmpty()) return
 
@@ -140,9 +134,9 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             drawnPolygons.add(polygon)
 
             // Add markers for each point in the polygon
-            polygonPoints.forEach { point ->
-                googleMap.addMarker(MarkerOptions().position(point).title("Polygon Point"))
-            }
+//            polygonPoints.forEach { point ->
+//                googleMap.addMarker(MarkerOptions().position(point).title("Polygon Point"))
+//            }
         }
     }
 
