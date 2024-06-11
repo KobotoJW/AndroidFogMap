@@ -40,7 +40,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1
-        private const val FOG_RADIUS_METERS = 30.0
+        private const val FOG_RADIUS_METERS = 15.0
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,24 +68,20 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             .setMaxUpdateDelayMillis(10000)
             .build()
 
-        // Location callback to handle location updates
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 if (locationResult.locations.isNotEmpty()) {
-                    val location = locationResult.locations.last() // Get the last location
+                    val location = locationResult.locations.last()
                     val currentLatLng = LatLng(location.latitude, location.longitude)
 
-                    // Add the new location to the visited locations list
                     visitedLocations.add(currentLatLng)
 
-                    // Save the location to Firebase
                     saveVisitedLocation(currentLatLng)
 
-                    // Update the map
                     updateMap()
+                    Log.d("VisitedLocations", visitedLocations.toString())
                 }
             }
-
         }
     }
 
@@ -111,18 +107,15 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         this.googleMap = googleMap
 
-        // Check for location permissions
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             == PackageManager.PERMISSION_GRANTED) {
             startLocationUpdates()
-            loadVisitedLocations()
         } else {
             ActivityCompat.requestPermissions(this,
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
                 LOCATION_PERMISSION_REQUEST_CODE)
         }
     }
-
 
     private fun startLocationUpdates() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -136,67 +129,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 
-    private fun updateMap() {
-        if (visitedLocations.isEmpty()) return
-
-        val radiusInDegrees = FOG_RADIUS_METERS / 111000.0 // Approximate conversion from meters to degrees
-        val newPolygons = mutableListOf<List<LatLng>>()
-
-        visitedLocations.forEach { location ->
-            val north = location.latitude + radiusInDegrees
-            val south = location.latitude - radiusInDegrees
-            val east = location.longitude + radiusInDegrees / cos(Math.toRadians(location.latitude))
-            val west = location.longitude - radiusInDegrees / cos(Math.toRadians(location.latitude))
-
-            // Create a buffer rectangle around the point
-            val bufferPolygon = listOf(
-                LatLng(north, west),
-                LatLng(north, east),
-                LatLng(south, east),
-                LatLng(south, west)
-            )
-
-            // Check if the new polygon overlaps with any existing polygon
-            val isOverlap = drawnPolygons.any { polygon ->
-                bufferPolygon.any { point -> isPointInPolygon(point, polygon.points) }
-            }
-
-            if (!isOverlap) {
-                newPolygons.add(bufferPolygon)
-            }
-        }
-
-        // Draw all the new polygons without clearing the map
-        newPolygons.forEach { polygonPoints ->
-            val polygonOptions = PolygonOptions().apply {
-                addAll(polygonPoints)
-                fillColor(0x60aa0000.toInt()) // Set the fill color with fixed alpha value
-                strokeColor(0x00000000) // No stroke
-            }
-            val polygon = googleMap.addPolygon(polygonOptions)
-            drawnPolygons.add(polygon)
-        }
-    }
-
-    private fun isPointInPolygon(point: LatLng, polygonPoints: List<LatLng>): Boolean {
-        var isInside = false
-        val n = polygonPoints.size
-        var j = n - 1
-        for (i in 0 until n) {
-            val vertex1 = polygonPoints[i]
-            val vertex2 = polygonPoints[j]
-            if (vertex1.longitude < point.longitude && vertex2.longitude >= point.longitude
-                || vertex2.longitude < point.longitude && vertex1.longitude >= point.longitude) {
-                if (vertex1.latitude + (point.longitude - vertex1.longitude) /
-                    (vertex2.longitude - vertex1.longitude) * (vertex2.latitude - vertex1.latitude) < point.latitude) {
-                    isInside = !isInside
-                }
-            }
-            j = i
-        }
-        return isInside
-    }
-
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>,
                                             grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -206,6 +138,43 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                     startLocationUpdates()
                 }
             }
+        }
+    }
+
+    private fun updateMap() {
+        if (visitedLocations.isEmpty()) return
+
+        val radiusInDegrees = FOG_RADIUS_METERS / 111000.0
+        val newPolygons = mutableListOf<List<LatLng>>()
+
+        val operationalList = visitedLocations.toMutableList()
+
+        operationalList.forEach { location ->
+            val north = location.latitude + radiusInDegrees
+            val south = location.latitude - radiusInDegrees
+            val east = location.longitude + radiusInDegrees / cos(Math.toRadians(location.latitude))
+            val west = location.longitude - radiusInDegrees / cos(Math.toRadians(location.latitude))
+
+            val bufferPolygon = listOf(
+                LatLng(north, west),
+                LatLng(north, east),
+                LatLng(south, east),
+                LatLng(south, west)
+            )
+
+            newPolygons.add(bufferPolygon)
+            visitedLocations.remove(location)
+        }
+        operationalList.clear()
+
+        newPolygons.forEach { polygonPoints ->
+            val polygonOptions = PolygonOptions().apply {
+                addAll(polygonPoints)
+                fillColor(0xffaa0000.toInt())
+                strokeColor(0x00000000)
+            }
+            val polygon = googleMap.addPolygon(polygonOptions)
+            drawnPolygons.add(polygon)
         }
     }
 

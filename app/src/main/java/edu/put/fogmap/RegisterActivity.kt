@@ -16,6 +16,7 @@ class RegisterActivity : AppCompatActivity() {
     private lateinit var emailEditText: EditText
     private lateinit var passwordEditText: EditText
     private lateinit var registerButton: Button
+    private lateinit var loginRedirectButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,6 +27,7 @@ class RegisterActivity : AppCompatActivity() {
         emailEditText = findViewById(R.id.emailEditText)
         passwordEditText = findViewById(R.id.passwordEditText)
         registerButton = findViewById(R.id.registerButton)
+        loginRedirectButton = findViewById(R.id.loginRedirectButton)
 
         registerButton.setOnClickListener {
             val email = emailEditText.text.toString().trim()
@@ -36,6 +38,11 @@ class RegisterActivity : AppCompatActivity() {
             } else {
                 registerUser(email, password)
             }
+        }
+
+        loginRedirectButton.setOnClickListener {
+            val intent = Intent(this, LoginActivity::class.java)
+            startActivity(intent)
         }
     }
 
@@ -49,7 +56,6 @@ class RegisterActivity : AppCompatActivity() {
                         val userId = it.uid
                         val userEmail = it.email
 
-                        // Save user data to Firebase Realtime Database
                         val database = FirebaseDatabase.getInstance()
                         val usersRef = database.getReference("users")
                         val userMap = hashMapOf(
@@ -60,8 +66,7 @@ class RegisterActivity : AppCompatActivity() {
                             .addOnCompleteListener { dbTask ->
                                 if (dbTask.isSuccessful) {
                                     Toast.makeText(this, "Registration successful", Toast.LENGTH_SHORT).show()
-                                    // Navigate to another activity if needed
-                                    startActivity(Intent(this, MapsActivity::class.java))
+                                    startActivity(Intent(this, LoginActivity::class.java))
                                     finish()
                                 } else {
                                     Log.w("RegisterActivity", "saveUserData:failure", dbTask.exception)

@@ -48,7 +48,6 @@ android {
 }
 
 dependencies {
-
     implementation libs.androidx.core.ktx
     implementation libs.androidx.lifecycle.runtime.ktx
     implementation libs.androidx.activity.compose
@@ -60,7 +59,7 @@ dependencies {
     implementation libs.play.services.maps
     implementation libs.play.services.location
     implementation libs.androidx.appcompat
-    implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
+    implementation platform("com.google.firebase:firebase-bom:33.1.0")
     implementation("com.google.firebase:firebase-analytics")
     implementation platform('com.google.firebase:firebase-bom:31.2.3')
     implementation ('com.google.firebase:firebase-auth')
