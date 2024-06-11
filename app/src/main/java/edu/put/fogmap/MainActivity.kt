@@ -1,22 +1,31 @@
 package edu.put.fogmap
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.Location
 import android.os.Bundle
 import android.util.Log
+import android.view.Menu
+import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.*
-import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polygon
 import com.google.android.gms.maps.model.PolygonOptions
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
@@ -26,6 +35,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var locationRequest: LocationRequest
     private val visitedLocations = mutableListOf<LatLng>()
     private val drawnPolygons = mutableListOf<Polygon>()
+    private lateinit var firestore: FirebaseFirestore
 
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1
@@ -34,7 +44,13 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        FirebaseApp.initializeApp(this)
         setContentView(R.layout.activity_main)
+
+        firestore = FirebaseFirestore.getInstance()
+
+        val toolbar: Toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
 
         val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
@@ -60,10 +76,33 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                     visitedLocations.add(currentLatLng)
                     Log.d("MapsActivity", "Visited locations: $visitedLocations")
 
+                    // Save the location to Firebase
+                    saveVisitedLocation(currentLatLng)
+
                     // Update the map
                     updateMap()
                 }
             }
+
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.toolbar_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_login -> {
+                startActivity(Intent(this, LoginActivity::class.java))
+                true
+            }
+            R.id.action_register -> {
+                startActivity(Intent(this, RegisterActivity::class.java))
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
@@ -74,12 +113,14 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             == PackageManager.PERMISSION_GRANTED) {
             startLocationUpdates()
+            loadVisitedLocations()
         } else {
             ActivityCompat.requestPermissions(this,
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
                 LOCATION_PERMISSION_REQUEST_CODE)
         }
     }
+
 
     private fun startLocationUpdates() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -132,11 +173,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             }
             val polygon = googleMap.addPolygon(polygonOptions)
             drawnPolygons.add(polygon)
-
-            // Add markers for each point in the polygon
-//            polygonPoints.forEach { point ->
-//                googleMap.addMarker(MarkerOptions().position(point).title("Polygon Point"))
-//            }
         }
     }
 
@@ -170,6 +206,40 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
     }
+
+    private fun saveVisitedLocation(location: LatLng) {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val locationMap = hashMapOf(
+            "latitude" to location.latitude,
+            "longitude" to location.longitude
+        )
+
+        // Log the data being sent to the database
+        Log.d("MapsActivity", "Saving location to database: $locationMap")
+
+        firestore.collection("users").document(userId).collection("locations").add(locationMap)
+    }
+
+    fun loadVisitedLocations() {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+
+        firestore.collection("users").document(userId).collection("locations")
+            .get()
+            .addOnSuccessListener { documents ->
+                visitedLocations.clear()
+                for (document in documents) {
+                    val locationMap = document.data
+                    val latitude = locationMap["latitude"] as Double
+                    val longitude = locationMap["longitude"] as Double
+                    visitedLocations.add(LatLng(latitude, longitude))
+                }
+                updateMap()
+            }
+            .addOnFailureListener { exception ->
+                Log.w("MapsActivity", "loadVisitedLocations:onFailure", exception)
+            }
+    }
+
 
     override fun onDestroy() {
         super.onDestroy()

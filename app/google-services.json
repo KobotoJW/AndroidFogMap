@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "197169546764",
+    "project_id": "fogmap-4d1aa",
+    "storage_bucket": "fogmap-4d1aa.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:197169546764:android:a86da528b2f0e8315b5029",
+        "android_client_info": {
+          "package_name": "edu.put.fogmap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDw-j86BWb1g31NgX9JRIeZvsHUD8tk7p4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
